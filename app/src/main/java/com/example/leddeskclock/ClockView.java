@@ -20,7 +20,7 @@ public final class ClockView extends View {
     };
     private final SharedPreferences preferences;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("yyyy.MM.dd  EEEE", Locale.KOREAN);
+    private final DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("yyyy.MM.dd EEEE", Locale.KOREAN);
     private ZonedDateTime now = ZonedDateTime.now();
 
     public ClockView(Context context, SharedPreferences preferences) {
@@ -35,9 +35,11 @@ public final class ClockView extends View {
 
     public void refresh() {
         now = ZonedDateTime.now(); // Re-read device time zone and clock every tick.
-        String pattern = preferences.getBoolean("24hour", true) ? "HH:mm" : "a hh:mm";
+        boolean twentyFour = preferences.getBoolean("24hour", true);
+        String pattern = twentyFour ? "HH:mm" : "hh:mm";
         if (preferences.getBoolean("seconds", true)) pattern += ":ss";
-        setContentDescription(now.format(DateTimeFormatter.ofPattern(pattern, Locale.KOREAN))
+        String period = twentyFour ? "" : (now.getHour() < 12 ? "AM " : "PM ");
+        setContentDescription(period + now.format(DateTimeFormatter.ofPattern(pattern, Locale.KOREAN))
                 + ", " + now.format(dateFormat) + ". 탭하여 시계 설정 열기");
         invalidate();
     }
@@ -53,7 +55,8 @@ public final class ClockView extends View {
         if (!twentyFour) hour = hour % 12 == 0 ? 12 : hour % 12;
         String digits = String.format(Locale.ROOT, seconds ? "%02d:%02d:%02d" : "%02d:%02d",
                 hour, now.getMinute(), now.getSecond());
-        float designWidth = seconds ? 408 : 264;
+        float periodWidth = twentyFour ? 0 : 48;
+        float designWidth = (seconds ? 408 : 264) + periodWidth;
         float scale = Math.min(getWidth() * 0.9f / designWidth, getHeight() * 0.52f / 100f);
         float left = (getWidth() - designWidth * scale) / 2f;
         float top = (getHeight() - 100 * scale) / 2f;
@@ -61,7 +64,16 @@ public final class ClockView extends View {
         canvas.save();
         canvas.translate(left, top);
         canvas.scale(scale, scale);
-        float x = 0;
+        if (!twentyFour) {
+            paint.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
+            paint.setTextAlign(Paint.Align.LEFT);
+            paint.setTextSize(22);
+            paint.setColor(led);
+            Paint.FontMetrics periodMetrics = paint.getFontMetrics();
+            canvas.drawText(now.getHour() < 12 ? "AM" : "PM", 0,
+                    50 - (periodMetrics.ascent + periodMetrics.descent) / 2f, paint);
+        }
+        float x = periodWidth;
         for (int i = 0; i < digits.length(); i++) {
             char digit = digits.charAt(i);
             if (digit == ':') {
@@ -81,19 +93,18 @@ public final class ClockView extends View {
         }
         canvas.restore();
         float density = getResources().getDisplayMetrics().density;
-        float textSize = Math.min(18 * density, getHeight() * 0.045f);
+        float textSize = Math.min(36 * density, getHeight() * 0.09f) * 1.3f;
         paint.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
         paint.setTextAlign(Paint.Align.CENTER);
         paint.setTextSize(textSize);
         paint.setColor(dim ? 0xff806962 : 0xffbfaaa2);
         String date = now.format(dateFormat);
-        if (!twentyFour) date = (now.getHour() < 12 ? "오전   " : "오후   ") + date;
         if (paint.measureText(date) > getWidth() * 0.9f)
             paint.setTextSize(textSize * getWidth() * 0.9f / paint.measureText(date));
-        canvas.drawText(date, getWidth() / 2f, top + 100 * scale + textSize * 2.1f, paint);
-        paint.setTextSize(Math.min(12 * density, getHeight() * 0.033f));
-        paint.setColor(dim ? 0xff554944 : 0xff80736d);
-        canvas.drawText("화면을 탭하면 설정이 열립니다", getWidth() / 2f,
-                getHeight() - Math.max(16 * density, getHeight() * 0.055f), paint);
+        Paint.FontMetrics metrics = paint.getFontMetrics();
+        float gap = Math.min(20 * density, getHeight() * 0.04f);
+        float dateBaseline = top + 100 * scale + gap - metrics.ascent;
+        dateBaseline = Math.min(dateBaseline, getHeight() * 0.96f - metrics.descent);
+        canvas.drawText(date, getWidth() / 2f, dateBaseline, paint);
     }
 }
